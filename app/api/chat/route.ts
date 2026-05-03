@@ -2,7 +2,8 @@ import { buildSystemPrompt, type UserContext } from '@/lib/ai-system-prompt'
 
 export const runtime = 'edge'
 
-const AI_MODEL = 'gemini-3.1-flash-lite-preview'
+// ✅ 실제 존재하는 Gemini 모델명으로 수정
+const AI_MODEL = 'gemini-1.5-flash-latest'
 
 interface GeminiMessage {
   role: 'user' | 'model'
@@ -21,7 +22,10 @@ export async function POST(request: Request) {
     const apiKey = process.env.GOOGLE_AI_API_KEY
     if (!apiKey) {
       console.error('[CRITICAL] GOOGLE_AI_API_KEY is missing in environment variables.')
-      return new Response(JSON.stringify({ error: 'CONFIG_ERROR', detail: 'API 키가 설정되지 않았습니다.' }), { status: 500 })
+      return new Response(
+        JSON.stringify({ error: 'CONFIG_ERROR', detail: 'API 키가 설정되지 않았습니다.' }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } }
+      )
     }
 
     const systemPrompt = buildSystemPrompt(userContext)
@@ -38,8 +42,9 @@ export async function POST(request: Request) {
       }
     })
 
-    const apiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODEL}:streamGenerateContent?key=${apiKey}`
-    
+    // ✅ streamGenerateContent 사용 (alt=sse 파라미터로 SSE 형식 수신)
+    const apiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODEL}:streamGenerateContent?alt=sse&key=${apiKey}`
+
     const response = await fetch(apiEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -47,8 +52,8 @@ export async function POST(request: Request) {
         contents,
         system_instruction: { parts: [{ text: systemPrompt }] },
         generationConfig: {
-          maxOutputTokens: 1024,
-          temperature: 0.7,
+          maxOutputTokens: 1500,
+          temperature: 0.75,
           topP: 0.9,
         },
         safetySettings: [
@@ -65,27 +70,32 @@ export async function POST(request: Request) {
       try {
         const errorData = await response.json()
         errorMessage = errorData.error?.message || errorData.message || JSON.stringify(errorData)
-      } catch (e) {
+      } catch {
         errorMessage = `HTTP ${response.status}: ${response.statusText}`
       }
-      
+
       console.error('[Gemini API Failure]:', errorMessage)
-      
-      return new Response(JSON.stringify({ 
-        error: 'AI_API_ERROR', 
-        status: response.status,
-        detail: errorMessage
-      }), { 
-        status: response.status,
-        headers: { 'Content-Type': 'application/json' }
-      })
+
+      return new Response(
+        JSON.stringify({
+          error: 'AI_API_ERROR',
+          status: response.status,
+          detail: errorMessage,
+        }),
+        { status: response.status, headers: { 'Content-Type': 'application/json' } }
+      )
     }
 
+    // ✅ SSE 형식(data: {...}) 파싱으로 교체 — 안정적이고 정확함
     const encoder = new TextEncoder()
     const decoder = new TextDecoder()
+
     const stream = new ReadableStream({
       async start(controller) {
-        if (!response.body) return
+        if (!response.body) {
+          controller.close()
+          return
+        }
         const reader = response.body.getReader()
         let buffer = ''
 
@@ -93,46 +103,39 @@ export async function POST(request: Request) {
           while (true) {
             const { done, value } = await reader.read()
             if (done) break
-            
-            buffer += decoder.decode(value, { stream: true })
-            
-            let startIndex
-            while ((startIndex = buffer.indexOf('{')) !== -1) {
-              let depth = 0
-              let endIndex = -1
-              
-              for (let i = startIndex; i < buffer.length; i++) {
-                if (buffer[i] === '{') depth++
-                else if (buffer[i] === '}') depth--
-                if (depth === 0) {
-                  endIndex = i
-                  break
-                }
-              }
-              
-              if (endIndex === -1) break 
 
-              const jsonStr = buffer.substring(startIndex, endIndex + 1)
+            buffer += decoder.decode(value, { stream: true })
+            const lines = buffer.split('\n')
+            // 마지막 줄은 미완성일 수 있으므로 버퍼에 남김
+            buffer = lines.pop() || ''
+
+            for (const line of lines) {
+              const trimmed = line.trim()
+              // SSE 형식: "data: {...JSON...}"
+              if (!trimmed.startsWith('data:')) continue
+              const jsonStr = trimmed.slice(5).trim()
+              if (!jsonStr || jsonStr === '[DONE]') continue
+
               try {
                 const json = JSON.parse(jsonStr)
-                const text = json?.candidates?.[0]?.content?.parts?.[0]?.text || 
-                             json?.candidates?.[0]?.parts?.[0]?.text
-                
+                const text = json?.candidates?.[0]?.content?.parts?.[0]?.text
+
                 if (text) {
                   controller.enqueue(encoder.encode(text))
                 }
-                
-                if (json?.candidates?.[0]?.finishReason === 'SAFETY') {
-                  controller.enqueue(encoder.encode('\n\n(안전 정책으로 인해 답변이 중단되었습니다.)'))
+
+                const finishReason = json?.candidates?.[0]?.finishReason
+                if (finishReason === 'SAFETY') {
+                  controller.enqueue(encoder.encode('\n\n(안전 정책으로 인해 일부 답변이 생략되었습니다.)'))
                 }
-              } catch (e) {
-                // Ignore parsing errors for partial chunks
+              } catch {
+                // 파싱 실패한 청크는 무시
               }
-              buffer = buffer.substring(endIndex + 1)
             }
           }
         } catch (err: any) {
-          console.error('[Stream Error]:', err.message)
+          console.error('[Stream Read Error]:', err.message)
+          controller.enqueue(encoder.encode('\n\n(연결이 중단되었습니다. 다시 시도해 주세요.)'))
         } finally {
           controller.close()
           reader.releaseLock()
@@ -140,18 +143,19 @@ export async function POST(request: Request) {
       },
     })
 
+    // ✅ Transfer-Encoding 헤더 제거 (Vercel Edge 환경 호환)
     return new Response(stream, {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
-        'Transfer-Encoding': 'chunked',
+        'Cache-Control': 'no-cache',
+        'X-Accel-Buffering': 'no',
       },
     })
-
   } catch (err: any) {
     console.error('[Global Chat API Error]:', err)
-    return new Response(JSON.stringify({ error: 'SERVER_ERROR', detail: err.message }), { 
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    })
+    return new Response(
+      JSON.stringify({ error: 'SERVER_ERROR', detail: err.message }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    )
   }
 }
