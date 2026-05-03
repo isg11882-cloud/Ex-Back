@@ -1,0 +1,39 @@
+# ──────────────────────────────────────────────────────
+# Cloudflare Workers 설정 파일
+# 웹 서비스 + API + DB 통합 관리
+# ──────────────────────────────────────────────────────
+
+name = "reunion-consulting-api"
+main = ".worker-next/index.mjs"    # @cloudflare/next-on-pages 빌드 결과
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+# ── Cloudflare Pages 설정 ─────────────────────────────
+[site]
+bucket = ".next/static"
+
+# ── Cloudflare D1 데이터베이스 ─────────────────────────
+# 생성 방법: npx wrangler d1 create reunion-db
+[[d1_databases]]
+binding = "DB"
+database_name = "reunion-consulting-db"
+database_id = "YOUR_D1_DATABASE_ID"    # wrangler d1 create 후 교체
+
+# ── 환경변수 (Cloudflare Dashboard에서 설정) ───────────
+# wrangler secret put GOOGLE_AI_API_KEY
+# wrangler secret put NEXT_PUBLIC_SUPABASE_URL
+# wrangler secret put NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+[vars]
+# 공개 환경변수 (비밀 아닌 것만 여기에)
+GEMMA_MODEL_ID = "gemma-3-27b-it"
+NEXT_PUBLIC_APP_URL = "https://reunion.pages.dev"
+
+# ── 빌드 설정 ─────────────────────────────────────────
+[build]
+command = "npm run build"
+
+# ── 로컬 개발 설정 ────────────────────────────────────
+[dev]
+port = 3000
+local_protocol = "http"
