@@ -1,22 +1,18 @@
 import { createBrowserClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('[CRITICAL] Supabase environment variables are missing! Check .env.local')
-}
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 
 // 브라우저용 클라이언트 (클라이언트 컴포넌트에서 사용)
 export const createClientSideClient = () => {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.error('[CRITICAL] Supabase URL or Anon Key is missing!')
+  }
+  return createBrowserClient(supabaseUrl, supabaseAnonKey)
 }
 
-// 범용 클라이언트
+// 범용 클라이언트 (서버 사이드에서도 안전하게 초기화)
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 // 유저 데이터 테이블 타입 정의 (필요 시 확장)
