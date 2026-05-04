@@ -3,7 +3,7 @@ import { buildSystemPrompt, type UserContext } from '@/lib/ai-system-prompt'
 export const runtime = 'edge'
 
 // Gemini 모델 (최신 Flash 우선, 실패 시 stable로 폴백)
-const AI_MODEL = process.env.GEMMA_MODEL_ID || 'gemini-1.5-flash-latest'
+const AI_MODEL = process.env.GEMMA_MODEL_ID || 'gemini-1.5-flash'
 
 interface GeminiMessage {
   role: 'user' | 'model'
@@ -19,17 +19,13 @@ export async function POST(request: Request) {
       image?: { mimeType: string; data: string }
     } = body
 
-    // 다양한 환경변수 이름 시도 (Vercel/Cloudflare 호환성)
-    const apiKey = process.env.GOOGLE_AI_API_KEY || 
-                   process.env.GEMINI_API_KEY || 
-                   process.env.GOOGLE_API_KEY;
-
+    const apiKey = process.env.GOOGLE_AI_API_KEY
     if (!apiKey) {
-      console.error('[CRITICAL] AI API Key is missing! Checked: GOOGLE_AI_API_KEY, GEMINI_API_KEY, GOOGLE_API_KEY');
+      console.error('[CRITICAL] GOOGLE_AI_API_KEY is not set in Vercel environment variables.')
       return new Response(
         JSON.stringify({
           error: 'CONFIG_ERROR',
-          detail: '서비스 설정(API Key)이 아직 완료되지 않았습니다. 관리자 대시보드에서 환경변수를 확인해 주세요.',
+          detail: '서비스 설정 중입니다. 잠시 후 다시 시도해 주세요. (관리자: Vercel 환경변수 GOOGLE_AI_API_KEY 확인 필요)',
         }),
         { status: 503, headers: { 'Content-Type': 'application/json' } }
       )
