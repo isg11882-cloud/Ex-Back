@@ -1,14 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
 import { useAppStore } from '@/lib/store'
 import { MISSIONS, type Mission } from '@/lib/data/missions'
 import { clsx } from 'clsx'
-
-export default function MissionPage() {
-import { useSearchParams } from 'next/navigation'
-import { Suspense } from 'react'
 
 function MissionPageContent() {
   const router = useRouter()
