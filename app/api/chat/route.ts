@@ -3,7 +3,7 @@ import { buildSystemPrompt, type UserContext } from '@/lib/ai-system-prompt'
 export const runtime = 'edge'
 
 // Gemini 모델
-const AI_MODEL = process.env.GEMMA_MODEL_ID || 'gemini-1.5-flash'
+const AI_MODEL = process.env.GEMMA_MODEL_ID || 'gemini-2.0-flash'
 
 interface GeminiMessage {
   role: 'user' | 'model'
