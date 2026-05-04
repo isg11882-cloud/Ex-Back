@@ -2,8 +2,8 @@ import { buildSystemPrompt, type UserContext } from '@/lib/ai-system-prompt'
 
 export const runtime = 'edge'
 
-// Gemini 모델 (환경변수가 없으면 가장 호환성이 높은 gemini-pro 사용)
-const AI_MODEL = process.env.GEMMA_MODEL_ID || 'gemini-pro'
+// Gemini 모델
+const AI_MODEL = process.env.GEMMA_MODEL_ID || 'gemini-1.5-flash'
 
 interface GeminiMessage {
   role: 'user' | 'model'
