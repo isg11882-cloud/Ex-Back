@@ -294,11 +294,11 @@ export default function ChatWindow({ userContext, initialMessage }: ChatWindowPr
           </div>
         </div>
         
-        {/* Idea 2: Quick Mission View Toggle */}
+        {/* Quick Mission View Toggle */}
         <div className="flex items-center gap-2">
           {activeMissions.length > 0 && (
             <button 
-              onClick={() => router.push('/mission')}
+              onClick={() => router.push('/mission?filter=active')}
               className="bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-[10px] font-black px-3 py-1.5 rounded-full border border-blue-500/30 transition-all flex items-center gap-1.5"
             >
               🎯 진행중 {activeMissions.length}
@@ -331,6 +331,19 @@ export default function ChatWindow({ userContext, initialMessage }: ChatWindowPr
             </button>
           </div>
         )}
+
+        {/* 전문가 상담 연결 배너 */}
+        <div className="mb-4 p-4 rounded-2xl bg-gradient-to-r from-gray-800 to-gray-900 border border-gray-700 flex items-center justify-between gap-4 group hover:border-gray-600 transition-colors cursor-pointer" onClick={() => alert('실제 전문가 1:1 상담 예약 페이지로 연결됩니다. (준비중)')}>
+          <div className="flex-1">
+            <h4 className="text-[11px] font-black text-white mb-1 flex items-center gap-1">
+              <span className="text-purple-400">✨</span> 더 깊은 분석이 필요하신가요?
+            </h4>
+            <p className="text-[10px] text-gray-400 leading-tight">상위 1% 재회 컨설턴트와의 1:1 심층 상담</p>
+          </div>
+          <button className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-[10px] font-black rounded-lg transition-colors whitespace-nowrap text-white">
+            예약하기
+          </button>
+        </div>
 
         {messages.map((msg) => (
           <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -412,7 +425,7 @@ export default function ChatWindow({ userContext, initialMessage }: ChatWindowPr
       )}
 
       {/* 입력창 */}
-      <form onSubmit={handleSubmit} className="px-4 py-3 border-t border-gray-800 bg-gray-900">
+      <form onSubmit={handleSubmit} className="px-4 py-3 border-t border-gray-800 bg-gray-900 pb-[calc(env(safe-area-inset-bottom)+12px)]">
         {selectedImage && (
           <div className="mb-3 flex items-center gap-3 bg-gray-800/50 p-2 rounded-xl border border-blue-500/30 animate-fade-in">
             <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-white/10">

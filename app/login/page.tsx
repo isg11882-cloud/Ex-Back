@@ -36,6 +36,12 @@ export default function LoginPage() {
       return
     }
 
+    if (provider === 'google') {
+      alert('준비중입니다.')
+      setLoading(null)
+      return
+    }
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
@@ -145,22 +151,21 @@ export default function LoginPage() {
           <div className="relative flex justify-center text-[10px] uppercase"><span className="bg-gray-950 px-2 text-gray-500 font-bold tracking-widest">Social Login</span></div>
         </div>
 
-        {/* Social Login Buttons */}
         <div className="space-y-4">
           <button 
             onClick={() => handleLogin('kakao')}
-            className="w-full transition-all active:scale-95 flex justify-center"
+            className="w-full transition-all active:scale-[0.98] flex justify-center hover:opacity-90"
           >
             <img 
-              src="/images/kakao_login.png" 
+              src="/images/kakao_login/ko/kakao_login_large_wide.png" 
               alt="카카오 로그인" 
-              className="w-full h-auto object-contain rounded-xl shadow-lg shadow-yellow-500/10"
+              className="w-full h-auto object-contain"
             />
           </button>
 
           <button 
             onClick={() => handleLogin('google')}
-            className="w-full h-14 bg-white text-gray-900 font-bold rounded-2xl flex items-center justify-center gap-3 transition-all border border-gray-200 active:scale-95 shadow-sm"
+            className="w-full h-[54px] bg-white text-gray-900 font-bold rounded-[12px] flex items-center justify-center gap-3 transition-all border border-gray-200 active:scale-[0.98] hover:bg-gray-50"
           >
             <span className="text-lg">G</span> 구글 계정으로 로그인
           </button>

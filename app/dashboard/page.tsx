@@ -112,7 +112,25 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* 5. Recent Activity / Motivation */}
+        {/* 5. 전문가 상담 배너 */}
+        <div 
+          onClick={() => alert('실제 전문가 1:1 상담 예약 페이지로 연결됩니다. (준비중)')}
+          className="bg-gradient-to-r from-blue-900 to-indigo-900 rounded-[2rem] p-6 border border-blue-500/30 shadow-2xl flex flex-col justify-center items-start cursor-pointer hover:border-blue-400 transition-all active:scale-[0.98] group relative overflow-hidden"
+        >
+          <div className="absolute right-0 top-0 w-32 h-32 bg-blue-500/20 rounded-full blur-2xl -mr-10 -mt-10 group-hover:bg-blue-400/30 transition-all"></div>
+          <span className="px-3 py-1 bg-white/10 text-white text-[10px] font-black rounded-full border border-white/20 uppercase tracking-tighter mb-3 relative z-10">
+            Premium Care
+          </span>
+          <h3 className="text-lg font-black text-white mb-1 relative z-10">상위 1% 전문가 1:1 심층 상담</h3>
+          <p className="text-blue-200 text-xs font-medium leading-relaxed mb-4 relative z-10 max-w-[80%]">
+            AI 진단을 바탕으로 나만의 맞춤형 재회 마스터 플랜을 세워보세요.
+          </p>
+          <div className="text-white text-xs font-black flex items-center gap-2 relative z-10">
+            예약하기 <span className="group-hover:translate-x-1 transition-transform">→</span>
+          </div>
+        </div>
+
+        {/* 6. Recent Activity / Motivation */}
         <div className="pb-6">
           <div className="flex justify-between items-center mb-4">
             <h3 className="font-black text-sm text-white/80">진행 중인 미션</h3>

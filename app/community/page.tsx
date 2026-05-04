@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useAppStore } from '@/lib/store'
 
 const SUCCESS_STORIES = [
   {
@@ -41,6 +43,18 @@ const FORUM_POSTS = [
 
 export default function CommunityPage() {
   const [activeTab, setActiveTab] = useState<'stories' | 'forum'>('stories')
+  const router = useRouter()
+  const { user } = useAppStore()
+
+  const handleWriteClick = () => {
+    if (!user) {
+      if (confirm('로그인이 필요한 기능입니다. 로그인 페이지로 이동하시겠습니까?')) {
+        router.push('/login')
+      }
+      return
+    }
+    alert('글쓰기 모달이 열립니다. (준비중)')
+  }
 
   return (
     <div className="min-h-screen bg-gray-950 flex flex-col max-w-md mx-auto pb-24 text-white">
@@ -106,7 +120,12 @@ export default function CommunityPage() {
           <div className="space-y-4">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-sm font-black text-gray-400">최근 올라온 고민</h2>
-              <button className="px-4 py-2 bg-white text-black text-[10px] font-black rounded-full">글쓰기</button>
+              <button 
+                onClick={handleWriteClick}
+                className="px-4 py-2 bg-white hover:bg-gray-200 transition-colors text-black text-[10px] font-black rounded-full"
+              >
+                글쓰기
+              </button>
             </div>
 
             {FORUM_POSTS.map(post => (

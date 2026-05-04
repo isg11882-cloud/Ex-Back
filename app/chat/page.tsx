@@ -25,7 +25,7 @@ function ChatPageContent() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-950">
+    <div className="h-[100dvh] flex flex-col bg-gray-950">
       <ChatWindow userContext={userContext} />
     </div>
   )
@@ -34,7 +34,7 @@ function ChatPageContent() {
 export default function ChatPage() {
   return (
     <Suspense fallback={
-      <div className="h-screen flex items-center justify-center bg-gray-950 text-white">
+      <div className="h-[100dvh] flex items-center justify-center bg-gray-950 text-white">
         상담 준비 중...
       </div>
     }>
