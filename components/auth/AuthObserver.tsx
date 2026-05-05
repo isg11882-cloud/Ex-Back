@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import { createSupabaseBrowser } from '@/lib/supabase/client'
+import { createSupabaseBrowser, isSupabaseConfigured } from '@/lib/supabase/client'
 import { syncLocalDataToSupabase } from '@/lib/sync'
 import { reconcileProfileOnLogin } from '@/lib/profile-sync'
 import { useAppStore } from '@/lib/store'
@@ -15,10 +15,16 @@ import { useAppStore } from '@/lib/store'
  *   - SIGNED_OUT → user 상태 비우기 (로컬 데이터는 유지: 게스트 모드 fallback)
  */
 export default function AuthObserver() {
-  const supabase = createSupabaseBrowser()
   const setUser = useAppStore((s) => s.setUser)
 
   useEffect(() => {
+    // 환경변수 누락 시 supabase init 자체를 건너뜀 (게스트 모드 동작 유지)
+    if (!isSupabaseConfigured()) {
+      console.warn('[AuthObserver] Supabase 환경변수 누락 — 인증 감시 비활성화 (게스트 모드)')
+      return
+    }
+    const supabase = createSupabaseBrowser()
+
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {

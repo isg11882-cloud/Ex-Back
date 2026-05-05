@@ -1,6 +1,6 @@
 'use client'
 
-import { createSupabaseBrowser } from '@/lib/supabase/client'
+import { createSupabaseBrowser, isSupabaseConfigured } from '@/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense, useState } from 'react'
 
@@ -22,8 +22,18 @@ function LoginPageContent() {
   // 로그인 완료 후 돌아갈 경로 (없으면 /dashboard)
   const next = params.get('next') || '/dashboard'
   const reason = params.get('reason') // 'save-report' | 'chat-backup' | 'community-write' 등
+  const oauthError = params.get('error') // 'auth_failed' 등 — auth/callback 에서 redirect
+
+  // 환경변수 누락 — 운영에 NEXT_PUBLIC_SUPABASE_URL 안 박혔을 때
+  const supabaseReady = isSupabaseConfigured()
 
   const handleLogin = async (provider: 'google' | 'kakao' | 'email') => {
+    if (!supabaseReady) {
+      alert(
+        '서비스 설정에 문제가 있어 로그인할 수 없습니다.\n관리자에게 알려주세요.\n(Supabase 환경변수 누락)',
+      )
+      return
+    }
     setLoading(provider)
 
     if (provider === 'email') {
@@ -157,6 +167,30 @@ function LoginPageContent() {
             {headline?.sub ?? '로그인하면 지금까지의 진행을 계정에 연결해 보관합니다.'}
           </p>
         </div>
+
+        {/* OAuth 콜백 실패 시 안내 */}
+        {oauthError && (
+          <div className="p-4 rounded-2xl bg-red-950/40 border border-red-500/30 text-left">
+            <div className="text-[11px] font-black text-red-400 uppercase tracking-widest mb-1">
+              로그인 실패
+            </div>
+            <p className="text-xs text-red-200 leading-relaxed">
+              인증 도중 문제가 발생했어요. 잠시 후 다시 시도해 주세요. 같은 문제가 반복되면 시크릿 창이나 다른 브라우저로 시도해 보세요.
+            </p>
+          </div>
+        )}
+
+        {/* Supabase 환경변수 누락 시 운영자 경고 */}
+        {!supabaseReady && (
+          <div className="p-4 rounded-2xl bg-yellow-950/40 border border-yellow-500/30 text-left">
+            <div className="text-[11px] font-black text-yellow-400 uppercase tracking-widest mb-1">
+              서비스 설정 점검 중
+            </div>
+            <p className="text-xs text-yellow-200 leading-relaxed">
+              현재 로그인 서비스 연결에 문제가 있습니다. 잠시 후 다시 시도해 주세요.
+            </p>
+          </div>
+        )}
 
         {/* 가치 4카드 — 무엇이 저장되는지 명시 */}
         <div className="grid grid-cols-2 gap-3 text-left">
