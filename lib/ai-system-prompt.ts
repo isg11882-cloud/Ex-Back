@@ -11,6 +11,18 @@ export interface UserContext {
   gender?: 'male' | 'female'
   partnerGender?: 'male' | 'female'
   situation?: string
+  /** 사용자가 직접 적은 자유 메모 (profiles.situation_memo) — Phase 2-A */
+  situationMemo?: string
+}
+
+/**
+ * daysSinceBreakup 기준으로 PHASE 를 재계산.
+ * 진단 시점의 phase 가 아니라 "지금 시점" 기준이라 매 채팅 요청마다 자동 갱신됨.
+ */
+export function phaseFromDays(days: number): 1 | 2 | 3 {
+  if (days < 30) return 1
+  if (days < 90) return 2
+  return 3
 }
 
 // ────────────────────────────────────────────
@@ -168,12 +180,13 @@ export function buildSystemPrompt(ctx: UserContext): string {
 
   const phaseGuide = PHASE_GUIDE[ctx.currentPhase] || PHASE_GUIDE[1]
   const userInfo = [
-    ctx.userName ? `내담자 이름: ${ctx.userName}` : '',
+    ctx.userName ? `내담자 호칭: ${ctx.userName}님` : '',
     ctx.gender ? `내담자 성별: ${ctx.gender === 'male' ? '남성' : '여성'}` : '',
     ctx.partnerGender ? `상대 성별: ${ctx.partnerGender === 'male' ? '남성' : '여성'}` : '',
     `이별 후 경과: ${ctx.daysSinceBreakup}일`,
     `현재 단계: PHASE ${ctx.currentPhase}`,
-    ctx.situation ? `상세 상황: ${ctx.situation}` : '',
+    ctx.situation ? `진단 요약: ${ctx.situation}` : '',
+    ctx.situationMemo ? `내담자가 직접 남긴 메모: ${ctx.situationMemo}` : '',
   ].filter(Boolean).join('\n')
 
   return `당신은 위시아(WISHIA)의 수석 재회 컨설턴트 '재이'입니다.

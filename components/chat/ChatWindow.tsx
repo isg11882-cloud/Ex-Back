@@ -10,6 +10,12 @@ import { useRouter } from 'next/navigation'
 import type { UserContext } from '@/lib/ai-system-prompt'
 import { useAppStore } from '@/lib/store'
 import { clsx } from 'clsx'
+import LoginPromptModal from '@/components/auth/LoginPromptModal'
+
+// 로그인 프롬프트 쿨다운(24시간)
+const LOGIN_PROMPT_COOLDOWN_MS = 24 * 60 * 60 * 1000
+// 로그인 프롬프트 트리거 임계값(메시지 개수 — 약 5턴)
+const LOGIN_PROMPT_MESSAGE_THRESHOLD = 10
 
 interface Message {
   id: string
@@ -39,6 +45,18 @@ function parseMissionRecommend(text: string) {
   } catch {
     return null
   }
+}
+
+// AI 추천 미션의 안정적 ID 생성 (제목 기반 슬러그)
+// - 같은 제목의 추천이 여러 번 떠도 같은 ID로 매핑되어 중복 시작/완료를 방지
+function dynamicMissionId(title: string) {
+  const normalized = title
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^\p{L}\p{N}-]/gu, '') // 한글/영숫자/하이픈만 유지
+    .slice(0, 60)
+  return `dynamic-${normalized || 'mission'}`
 }
 
 function cleanContent(text: string) {
@@ -90,19 +108,21 @@ export default function ChatWindow({ userContext, initialMessage }: ChatWindowPr
   const [errorState, setErrorState] = useState<string | null>(null)
   const [selectedImage, setSelectedImage] = useState<{ file: File; preview: string } | null>(null)
   
-  const { 
+  const {
     user,
-    chatHistory, 
-    setChatHistory, 
-    activeMissions, 
-    startMission, 
-    isMissionActiveByTitle, 
-    isMissionCompletedByTitle 
+    chatHistory,
+    setChatHistory,
+    activeMissions,
+    startMission,
+    isMissionActiveByTitle,
+    isMissionCompletedByTitle,
+    lastLoginPromptedAt,
   } = useAppStore()
 
   // 초기 메시지 설정 (저장된 내역이 있으면 그것을 사용, 없으면 빈 배열로 시작하여 useEffect에서 처리)
   const [messages, setMessages] = useState<Message[]>(chatHistory.length > 0 ? chatHistory : [])
-  
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false)
+
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -136,6 +156,19 @@ export default function ChatWindow({ userContext, initialMessage }: ChatWindowPr
       bottomRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' })
     }
   }, [messages, isStreaming])
+
+  // 로그인 프롬프트: 비로그인 + 메시지 N개 누적 + 24h 쿨다운 통과 시 1회 노출
+  useEffect(() => {
+    if (user) return
+    if (isStreaming) return
+    if (messages.length < LOGIN_PROMPT_MESSAGE_THRESHOLD) return
+
+    const lastTs = lastLoginPromptedAt ? new Date(lastLoginPromptedAt).getTime() : 0
+    const elapsed = Date.now() - lastTs
+    if (elapsed < LOGIN_PROMPT_COOLDOWN_MS) return
+
+    setShowLoginPrompt(true)
+  }, [user, isStreaming, messages.length, lastLoginPromptedAt])
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -276,6 +309,13 @@ export default function ChatWindow({ userContext, initialMessage }: ChatWindowPr
   return (
     <div className="flex flex-col h-full bg-gray-950">
 
+      <LoginPromptModal
+        open={showLoginPrompt}
+        onClose={() => setShowLoginPrompt(false)}
+        reason="chat-backup"
+        next="/chat"
+      />
+
       {/* Header (Dynamic) */}
       <div className="flex items-center justify-between px-4 py-4 bg-gray-900/50 border-b border-gray-800 backdrop-blur-md sticky top-0 z-20">
         <div className="flex items-center gap-3">
@@ -316,19 +356,11 @@ export default function ChatWindow({ userContext, initialMessage }: ChatWindowPr
       {/* Messages List */}
       <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-hide">
         
-        {/* Login Nudge Banner for Guests */}
-        {!user && (
-          <div className="mb-8 p-4 rounded-2xl bg-gradient-to-r from-blue-900/40 to-purple-900/40 border border-blue-500/20 backdrop-blur-md flex items-center justify-between gap-4 group">
-            <div className="flex-1">
-              <h4 className="text-[11px] font-black text-blue-400 uppercase tracking-widest mb-1">Backup Enabled</h4>
-              <p className="text-[10px] text-gray-400 leading-tight">상담 기록이 유실되지 않게 계정을 연결할까요?</p>
-            </div>
-            <button 
-              onClick={() => router.push('/login')}
-              className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-[10px] font-black rounded-lg transition-colors whitespace-nowrap"
-            >
-              로그인하기
-            </button>
+        {/* 비로그인 사용자: 메시지가 의미 있게 쌓이기 전에는 작은 인디케이터만 노출.
+            본격적인 로그인 권유는 5턴 시점 모달(LoginPromptModal)이 담당. */}
+        {!user && messages.length < LOGIN_PROMPT_MESSAGE_THRESHOLD && (
+          <div className="mb-4 px-3 py-2 rounded-full bg-gray-800/40 border border-white/5 backdrop-blur-sm flex items-center justify-center gap-2 text-[10px] text-gray-400">
+            <span>👋 게스트 모드 — 상담 내역은 이 기기에만 저장돼요.</span>
           </div>
         )}
 
@@ -385,11 +417,12 @@ export default function ChatWindow({ userContext, initialMessage }: ChatWindowPr
                   </div>
                   <div className="text-white font-bold text-base mb-1">{msg.missionRecommend.title}</div>
                   <div className="text-indigo-200/70 text-xs leading-relaxed mb-4">{msg.missionRecommend.reason}</div>
-                  <button 
+                  <button
                     onClick={() => {
-                      const mId = `dynamic-${Date.now()}`
-                      startMission(mId, msg.missionRecommend!.title)
-                      alert(`'${msg.missionRecommend?.title}' 미션을 시작했습니다!`)
+                      const title = msg.missionRecommend!.title
+                      const mId = dynamicMissionId(title)
+                      startMission(mId, title)
+                      alert(`'${title}' 미션을 시작했습니다!`)
                     }}
                     disabled={isMissionActiveByTitle(msg.missionRecommend.title) || isMissionCompletedByTitle(msg.missionRecommend.title)}
                     className={clsx(

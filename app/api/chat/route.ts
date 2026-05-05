@@ -1,4 +1,5 @@
-import { buildSystemPrompt, type UserContext } from '@/lib/ai-system-prompt'
+import { buildSystemPrompt, phaseFromDays, type UserContext } from '@/lib/ai-system-prompt'
+import { createSupabaseServer } from '@/lib/supabase/server'
 
 export const runtime = 'edge'
 
@@ -10,12 +11,69 @@ interface GeminiMessage {
   parts: Array<{ text?: string; inline_data?: { mime_type: string; data: string } }>
 }
 
+/**
+ * Phase 2-A — AI Contextual Memory
+ *
+ * 로그인 사용자라면 profiles 캐시(breakup_type, breakup_date, current_phase,
+ * diagnosis_summary, situation_memo, nickname)를 1쿼리로 읽어 시스템 프롬프트에 주입.
+ * 클라이언트가 보낸 userContext 는 비로그인 fallback 으로만 사용.
+ *
+ * days_since_breakup 은 profiles.breakup_date(DATE) 기준으로 매 호출 재계산.
+ * PHASE 도 그 결과로 자동 갱신 (시간이 지나면 PHASE 1 → 2 → 3 자연스럽게 진입).
+ */
+async function resolveUserContext(clientContext: UserContext | undefined): Promise<UserContext> {
+  // 비로그인/실패 시 fallback 으로 쓸 안전한 기본값
+  const fallback: UserContext = clientContext ?? {
+    breakupType: null,
+    daysSinceBreakup: 0,
+    currentPhase: 1,
+  }
+
+  try {
+    const supabase = await createSupabaseServer()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return fallback
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('nickname, breakup_type, breakup_date, current_phase, days_since_breakup, diagnosis_summary, situation_memo')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (!profile) return fallback
+
+    // breakup_date 가 있으면 정확히 재계산, 없으면 캐시값 → 클라값 순으로 fallback
+    const recomputedDays = profile.breakup_date
+      ? Math.max(0, Math.floor((Date.now() - new Date(profile.breakup_date).getTime()) / 86_400_000))
+      : null
+
+    const days = recomputedDays
+      ?? profile.days_since_breakup
+      ?? fallback.daysSinceBreakup
+
+    return {
+      breakupType: profile.breakup_type ?? fallback.breakupType,
+      // PHASE 는 days 기준으로 자동 재계산 (진단 시점 phase 는 초기값일 뿐)
+      currentPhase: phaseFromDays(days),
+      daysSinceBreakup: days,
+      userName: profile.nickname ?? fallback.userName,
+      gender: fallback.gender,
+      partnerGender: fallback.partnerGender,
+      situation: profile.diagnosis_summary ?? fallback.situation,
+      situationMemo: profile.situation_memo ?? undefined,
+    }
+  } catch (err) {
+    console.error('[chat] resolveUserContext failed, using client fallback:', err)
+    return fallback
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { messages, userContext, image }: {
+    const { messages, userContext: clientContext, image }: {
       messages: Array<{ role: 'user' | 'assistant'; content: string }>
-      userContext: UserContext
+      userContext?: UserContext
       image?: { mimeType: string; data: string }
     } = body
 
@@ -31,6 +89,8 @@ export async function POST(request: Request) {
       )
     }
 
+    // 서버 컨텍스트 머지: 로그인 사용자는 profiles 우선, 비로그인은 클라 값 그대로
+    const userContext = await resolveUserContext(clientContext)
     const systemPrompt = buildSystemPrompt(userContext)
 
     const contents: GeminiMessage[] = messages.map((m, idx) => {
@@ -45,7 +105,7 @@ export async function POST(request: Request) {
       }
     })
 
-    // ✅ streamGenerateContent 사용 (alt=sse 파라미터로 SSE 형식 수신)
+    // streamGenerateContent 사용 (alt=sse 파라미터로 SSE 형식 수신)
     const apiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODEL}:streamGenerateContent?alt=sse&key=${apiKey}`
 
     const response = await fetch(apiEndpoint, {
@@ -89,7 +149,7 @@ export async function POST(request: Request) {
       )
     }
 
-    // ✅ SSE 형식(data: {...}) 파싱으로 교체 — 안정적이고 정확함
+    // SSE 형식(data: {...}) 파싱 — 안정적이고 정확함
     const encoder = new TextEncoder()
     const decoder = new TextDecoder()
 
@@ -114,7 +174,6 @@ export async function POST(request: Request) {
 
             for (const line of lines) {
               const trimmed = line.trim()
-              // SSE 형식: "data: {...JSON...}"
               if (!trimmed.startsWith('data:')) continue
               const jsonStr = trimmed.slice(5).trim()
               if (!jsonStr || jsonStr === '[DONE]') continue
@@ -146,7 +205,6 @@ export async function POST(request: Request) {
       },
     })
 
-    // ✅ Transfer-Encoding 헤더 제거 (Vercel Edge 환경 호환)
     return new Response(stream, {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',

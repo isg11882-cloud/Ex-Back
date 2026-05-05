@@ -1,20 +1,31 @@
 'use client'
 
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useAppStore } from '@/lib/store'
-import { clsx } from 'clsx'
+import { createSupabaseBrowser } from '@/lib/supabase/client'
+import NicknameEditor from './_components/NicknameEditor'
 
 export default function MyPage() {
   const router = useRouter()
-  const { 
-    nickname, 
-    diagnosis, 
-    totalPoints, 
-    chatCount, 
-    completedMissions, 
+  const supabase = createSupabaseBrowser()
+  const {
+    nickname,
+    diagnosis,
+    totalPoints,
+    chatCount,
+    completedMissions,
     emotions,
-    resetAll 
+    user,
+    resetAll,
   } = useAppStore()
+
+  const handleLogout = async () => {
+    if (!confirm('로그아웃하시겠습니까? 이 기기의 진단/상담 내역은 그대로 남아 있습니다.')) return
+    await supabase.auth.signOut()
+    // user 상태는 AuthObserver가 onAuthStateChange로 갱신
+    router.push('/dashboard')
+  }
 
   // 레벨 계산 (임시 로직: 200포인트당 1레벨)
   const level = Math.floor(totalPoints / 200) + 1
@@ -27,20 +38,80 @@ export default function MyPage() {
       
       {/* Header & Profile */}
       <div className="px-6 pt-12 pb-8 bg-gradient-to-b from-blue-900/20 to-gray-950 rounded-b-[3rem] border-b border-white/5">
-        <div className="flex items-center gap-4 mb-8">
+        <div className="flex items-center gap-4 mb-6">
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-3xl shadow-xl shadow-blue-500/20">
             👤
           </div>
-          <div>
+          <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <h2 className="text-xl font-black">{nickname || '재회 희망자'}</h2>
-              <span className="bg-blue-600 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest">LV.{level}</span>
+              <NicknameEditor
+                initial={nickname || (user?.email?.split('@')[0]) || '재회 희망자'}
+                isLoggedIn={!!user}
+              />
+              <span className="bg-blue-600 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest flex-shrink-0">LV.{level}</span>
             </div>
-            <p className="text-gray-400 text-xs">
+            <p className="text-gray-400 text-xs truncate">
               {diagnosis ? `${diagnosis.title} 유형 · PHASE ${diagnosis.phase}` : '진단 전입니다.'}
             </p>
           </div>
         </div>
+
+        {/* 진단 결과 다시 보기 / 다시 받기 */}
+        <div className="grid grid-cols-2 gap-2 mb-4">
+          {diagnosis ? (
+            <Link
+              href="/diagnosis/result"
+              className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-gray-900/60 border border-white/5 rounded-xl text-[11px] font-bold text-gray-300 hover:text-white hover:border-blue-500/40 transition-colors"
+            >
+              📊 내 리포트 보기
+            </Link>
+          ) : (
+            <Link
+              href="/diagnosis"
+              className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-blue-600/20 border border-blue-500/40 rounded-xl text-[11px] font-bold text-blue-300 hover:bg-blue-600/30 transition-colors col-span-2"
+            >
+              🔍 무료 진단 시작하기
+            </Link>
+          )}
+          {diagnosis && (
+            <Link
+              href="/diagnosis"
+              className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-gray-900/60 border border-white/5 rounded-xl text-[11px] font-bold text-gray-400 hover:text-white hover:border-white/20 transition-colors"
+            >
+              🔄 다시 진단받기
+            </Link>
+          )}
+        </div>
+
+        {/* 계정 상태: 로그인 / 비로그인 분기 */}
+        {user ? (
+          <div className="flex items-center justify-between gap-3 px-4 py-3 bg-gray-900/60 border border-white/5 rounded-2xl">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+              <div className="min-w-0">
+                <div className="text-[10px] font-black text-green-400 uppercase tracking-widest">Synced</div>
+                <div className="text-[11px] text-gray-300 truncate">{user.email ?? '계정 연결됨'}</div>
+              </div>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="text-[10px] font-bold text-gray-400 hover:text-red-400 px-3 py-1.5 rounded-full border border-white/10 hover:border-red-500/40 transition-colors flex-shrink-0"
+            >
+              로그아웃
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => router.push('/login?reason=save-report&next=/mypage')}
+            className="w-full flex items-center justify-between gap-3 px-4 py-3 bg-gradient-to-r from-blue-600/20 to-purple-600/20 border border-blue-500/30 rounded-2xl hover:border-blue-400 transition-colors text-left"
+          >
+            <div>
+              <div className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Guest Mode</div>
+              <div className="text-[11px] text-gray-300">계정 연결로 모든 데이터 영구 보관</div>
+            </div>
+            <span className="text-blue-300 text-xs font-black">로그인 →</span>
+          </button>
+        )}
 
         {/* Level Stats */}
         <div className="space-y-2">

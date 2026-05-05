@@ -4,9 +4,10 @@ import { useAppStore } from '@/lib/store'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import { getDailyDirective } from '@/lib/data/daily-directives'
 
 export default function DashboardPage() {
-  const { diagnosis, activeMissions, user, nickname } = useAppStore()
+  const { diagnosis, activeMissions, user, nickname, breakupDate } = useAppStore()
   const router = useRouter()
   const [mounted, setMounted] = useState(false)
 
@@ -22,6 +23,17 @@ export default function DashboardPage() {
 
   const displayName = nickname || (user?.email?.split('@')[0]) || '재회 꿈나무'
 
+  // 정확한 이별 날짜가 있으면 그것으로, 없으면 진단의 daysSinceBreakup 사용
+  const daysSince = breakupDate
+    ? Math.max(0, Math.floor((Date.now() - new Date(breakupDate).getTime()) / (1000 * 60 * 60 * 24)))
+    : diagnosis.daysSinceBreakup
+
+  const directive = getDailyDirective(diagnosis.breakupType, diagnosis.phase, daysSince)
+
+  // No-Contact 진행 바: PHASE 1(공백기 30일)을 기준으로 채워짐
+  const noContactGoalDays = 30
+  const noContactProgress = Math.min(100, Math.round((daysSince / noContactGoalDays) * 100))
+
   return (
     <div className="min-h-screen bg-gray-950 flex flex-col max-w-md mx-auto pb-24 overflow-x-hidden text-white">
       
@@ -31,11 +43,13 @@ export default function DashboardPage() {
           <p className="text-blue-400 text-xs font-bold tracking-widest uppercase">Welcome Back</p>
           <h1 className="text-2xl font-black italic">Hello, {displayName}!</h1>
         </div>
-        <div className="flex -space-x-2">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 border-2 border-gray-950 flex items-center justify-center text-lg shadow-lg">
-            ✨
-          </div>
-        </div>
+        <Link
+          href="/diagnosis/result"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 hover:border-blue-500/40 text-[10px] font-bold text-blue-300 transition-colors"
+          title="내 진단 리포트 다시 보기"
+        >
+          📊 리포트
+        </Link>
       </section>
 
       <div className="px-6 space-y-6">
@@ -52,7 +66,18 @@ export default function DashboardPage() {
                 <span className="px-3 py-1 bg-blue-500/10 text-blue-400 text-[10px] font-black rounded-full border border-blue-500/20 uppercase tracking-tighter">
                   Strategy: No Contact
                 </span>
-                <h2 className="text-3xl font-black mt-3">D-12</h2>
+                <h2 className="text-3xl font-black mt-3">D+{daysSince}</h2>
+                {!breakupDate && (
+                  <div className="text-[10px] text-gray-500 mt-1">
+                    * 자동 추정값 ·{' '}
+                    <button
+                      onClick={() => router.push('/diagnosis')}
+                      className="underline hover:text-blue-400"
+                    >
+                      정확한 날짜 입력
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="text-right">
                 <div className="text-[10px] text-gray-500 font-bold uppercase mb-1">Success Rate</div>
@@ -62,28 +87,28 @@ export default function DashboardPage() {
 
             <div className="space-y-4">
               <div className="w-full bg-gray-800 h-2 rounded-full overflow-hidden">
-                <div className="bg-gradient-to-r from-blue-500 to-purple-500 h-full w-2/3 shadow-[0_0_10px_rgba(59,130,246,0.5)]"></div>
+                <div
+                  className="bg-gradient-to-r from-blue-500 to-purple-500 h-full shadow-[0_0_10px_rgba(59,130,246,0.5)] transition-all duration-700"
+                  style={{ width: `${noContactProgress}%` }}
+                />
               </div>
               <p className="text-xs text-gray-400 leading-relaxed font-medium">
-                지금은 상대방의 <span className="text-white font-bold">부정적 감정이 희석</span>되는 골든타임입니다. 
+                지금은 상대방의 <span className="text-white font-bold">부정적 감정이 희석</span>되는 골든타임입니다.
                 침묵은 가장 강력한 무기임을 잊지 마세요.
               </p>
             </div>
           </div>
         </div>
 
-        {/* 3. Daily Directive (Action Card) */}
+        {/* 3. Daily Directive (Action Card) — 진단 결과/PHASE/경과일에 따라 동적 */}
         <div className="bg-gradient-to-br from-gray-900 to-gray-950 rounded-[2rem] p-6 border border-white/5 shadow-2xl">
           <div className="flex items-center gap-3 mb-5">
             <div className="w-8 h-8 bg-purple-500/20 rounded-xl flex items-center justify-center text-sm">🎯</div>
             <h3 className="font-black text-sm tracking-tight text-white/90">오늘의 행동 지침</h3>
           </div>
-          
+
           <div className="bg-white/5 rounded-2xl p-4 border border-white/5 mb-4">
-            <p className="text-sm text-gray-200 leading-relaxed italic">
-              "상대방의 SNS를 염탐하고 싶은 유혹이 들 때마다, 
-              당신의 <span className="text-purple-400 font-bold">가장 멋진 모습</span>을 인스타그램 스토리에 딱 한 장만 올리세요."
-            </p>
+            <p className="text-sm text-gray-200 leading-relaxed italic">"{directive.text}"</p>
           </div>
 
           <Link 

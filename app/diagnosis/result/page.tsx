@@ -88,8 +88,8 @@ export default function DiagnosisResultPage() {
               지금 보신 전문 진단 결과와 분석 리포트를<br/>
               언제 어디서든 꺼내 볼 수 있게 안전하게 저장하세요.
             </p>
-            <button 
-              onClick={() => router.push('/login')}
+            <button
+              onClick={() => router.push('/login?reason=save-report&next=/dashboard')}
               className="w-full py-5 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl font-black text-sm shadow-xl shadow-blue-600/20 active:scale-95 transition-all"
             >
               3초만에 저장하고 동기화하기

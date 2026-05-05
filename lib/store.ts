@@ -5,6 +5,7 @@
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { MISSIONS } from './data/missions'
 
 export type BreakupType = 'A' | 'B' | 'C' | 'D'
 
@@ -26,7 +27,9 @@ export interface EmotionEntry {
 
 export interface MissionCompletion {
   missionId: string
+  title: string
   completedAt: string
+  pointsEarned: number
   note?: string
 }
 
@@ -35,6 +38,9 @@ export interface ActiveMission {
   startedAt: string
   title: string
 }
+
+// 동적(AI 추천) 미션의 기본 포인트
+const DYNAMIC_MISSION_DEFAULT_POINTS = 50
 
 interface AppState {
   // 사용자 프로필
@@ -62,6 +68,14 @@ interface AppState {
   isMissionActive: (missionId: string) => boolean
   isMissionActiveByTitle: (title: string) => boolean
   isMissionCompletedByTitle: (title: string) => boolean
+
+  // 마지막 Supabase 동기화 시점 (멱등성 가드)
+  lastSyncedAt: string | null
+  setLastSyncedAt: (iso: string | null) => void
+
+  // 로그인 프롬프트 쿨다운 (의미 있는 데이터가 쌓인 시점에만 1회 권유)
+  lastLoginPromptedAt: string | null
+  markLoginPrompted: () => void
 
   // 포인트
   totalPoints: number
@@ -115,15 +129,32 @@ export const useAppStore = create<AppState>()(
       })),
 
       completedMissions: [],
-      completeMission: (missionId, note) => set((s) => ({
-        activeMissions: s.activeMissions.filter(m => m.missionId !== missionId),
-        completedMissions: [...s.completedMissions, {
-          missionId,
-          completedAt: new Date().toISOString(),
-          note,
-        }],
-        totalPoints: s.totalPoints + 50 // 기본 포인트 지급
-      })),
+      completeMission: (missionId, note) => set((s) => {
+        // 정적 미션이면 데이터에서 실제 포인트/타이틀 조회, 동적(AI 추천) 미션이면 activeMissions의 title + 기본 포인트 사용
+        const staticMission = MISSIONS.find(m => m.id === missionId)
+        const active = s.activeMissions.find(m => m.missionId === missionId)
+        const title = staticMission?.title ?? active?.title ?? '미션'
+        const pointsEarned = staticMission?.points ?? DYNAMIC_MISSION_DEFAULT_POINTS
+
+        const alreadyCompleted = s.completedMissions.some(m => m.missionId === missionId)
+        if (alreadyCompleted) {
+          return {
+            activeMissions: s.activeMissions.filter(m => m.missionId !== missionId),
+          }
+        }
+
+        return {
+          activeMissions: s.activeMissions.filter(m => m.missionId !== missionId),
+          completedMissions: [...s.completedMissions, {
+            missionId,
+            title,
+            completedAt: new Date().toISOString(),
+            pointsEarned,
+            note,
+          }],
+          totalPoints: s.totalPoints + pointsEarned,
+        }
+      }),
       isMissionCompleted: (missionId) =>
         get().completedMissions.some((m) => m.missionId === missionId),
       isMissionActive: (missionId) =>
@@ -131,13 +162,13 @@ export const useAppStore = create<AppState>()(
       isMissionActiveByTitle: (title) =>
         get().activeMissions.some((m) => m.title === title),
       isMissionCompletedByTitle: (title) =>
-        get().completedMissions.some((m) => {
-          // MISSIONS 데이터에서 타이틀 매칭 확인 (가져와서 확인하거나 store에 저장된 타이틀이 없으면 어려움)
-          // 여기서는 단순히 activeMissions에 없고 completedMissions에는 missionId만 있으므로 
-          // 실제로는 MISSIONS 데이터를 참조해야 정확함. 
-          // 하지만 지금은 active 확인이 더 중요함.
-          return false; // 임시
-        }),
+        get().completedMissions.some((m) => m.title === title),
+
+      lastSyncedAt: null,
+      setLastSyncedAt: (iso) => set({ lastSyncedAt: iso }),
+
+      lastLoginPromptedAt: null,
+      markLoginPrompted: () => set({ lastLoginPromptedAt: new Date().toISOString() }),
 
       totalPoints: 0,
       addPoints: (pts) => set((s) => ({ totalPoints: s.totalPoints + pts })),
@@ -162,6 +193,8 @@ export const useAppStore = create<AppState>()(
         streakDays: 0,
         chatCount: 0,
         chatHistory: [],
+        lastSyncedAt: null,
+        lastLoginPromptedAt: null,
       }),
     }),
     {
